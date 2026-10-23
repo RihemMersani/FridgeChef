@@ -4,10 +4,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../ingredients/screens/ingredients_screen.dart';
+import '../../fridge/screens/my_fridge_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  // Déconnexion Firebase
   Future<void> logout(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -24,6 +26,26 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
+  // Ouvrir la page Mon Frigo
+  void openMyFridge(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const MyFridgeScreen(),
+      ),
+    );
+  }
+
+  // Ouvrir le catalogue des ingrédients
+  void openIngredients(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const IngredientsScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -34,6 +56,7 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+
       appBar: AppBar(
         title: const Text(
           'FridgeChef',
@@ -44,8 +67,8 @@ class HomeScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () => logout(context),
             tooltip: 'Se déconnecter',
+            onPressed: () => logout(context),
             icon: const Icon(
               Icons.logout,
               color: AppColors.primary,
@@ -53,6 +76,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -62,8 +86,10 @@ class HomeScreen extends StatelessWidget {
                 maxWidth: 450,
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment:
+                    CrossAxisAlignment.stretch,
                 children: [
+                  // Logo
                   const Icon(
                     Icons.restaurant_menu,
                     size: 75,
@@ -72,6 +98,7 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
+                  // Message de bienvenue
                   Text(
                     'Bonjour $name !',
                     textAlign: TextAlign.center,
@@ -95,6 +122,7 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 30),
 
+                  // Carte Mon Frigo
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -109,9 +137,7 @@ class HomeScreen extends StatelessWidget {
                           color: AppColors.primary,
                           size: 50,
                         ),
-
                         SizedBox(height: 14),
-
                         Text(
                           'Mon Frigo',
                           style: TextStyle(
@@ -119,12 +145,11 @@ class HomeScreen extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-
                         SizedBox(height: 10),
-
                         Text(
-                          'Découvrez les ingrédients disponibles '
-                          'dans notre catalogue.',
+                          'Gérez les ingrédients de votre '
+                          'réfrigérateur et découvrez '
+                          'ce que vous pouvez cuisiner !',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 15,
@@ -137,23 +162,16 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
+                  // Bouton Mon Frigo
                   SizedBox(
                     height: 55,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const IngredientsScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: () => openMyFridge(context),
                       icon: const Icon(
                         Icons.kitchen_outlined,
                       ),
                       label: const Text(
-                        'Voir les ingrédients',
+                        'Ouvrir mon frigo',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -164,20 +182,45 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 14),
 
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Les recettes arrivent bientôt !',
+                  // Bouton catalogue
+                  SizedBox(
+                    height: 55,
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          openIngredients(context),
+                      icon: const Icon(
+                        Icons.list_alt_outlined,
+                      ),
+                      label: const Text(
+                        'Voir les ingrédients',
+                        style: TextStyle(fontSize: 15),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Recettes : fonctionnalité future
+                  SizedBox(
+                    height: 55,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Les recettes arrivent bientôt !',
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.restaurant),
-                    label: const Text(
-                      'Découvrir les recettes',
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.restaurant_menu,
+                      ),
+                      label: const Text(
+                        'Découvrir les recettes',
+                        style: TextStyle(fontSize: 15),
+                      ),
                     ),
                   ),
                 ],
