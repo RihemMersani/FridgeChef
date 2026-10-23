@@ -1,25 +1,20 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-// Configuration Firebase
 import 'firebase_options.dart';
-
-// Thème de l'application
 import 'core/theme/app_theme.dart';
-
-// Page de connexion
 import 'features/auth/screens/login_screen.dart';
+import 'features/home/screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialisation Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Lancement de l'application
   runApp(const FridgeChefApp());
 }
 
@@ -30,15 +25,37 @@ class FridgeChefApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'FridgeChef',
-
-      // Supprimer la bannière DEBUG
       debugShowCheckedModeBanner: false,
-
-      // Appliquer notre thème personnalisé
       theme: AppTheme.lightTheme,
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
 
-      // Page affichée au démarrage
-      home: const LoginScreen(),
+          if (snapshot.hasError) {
+            return const Scaffold(
+              body: Center(
+                child: Text(
+                  'Erreur de connexion à Firebase.',
+                ),
+              ),
+            );
+          }
+
+          if (snapshot.hasData) {
+            return const HomeScreen();
+          }
+
+          return const LoginScreen();
+        },
+      ),
     );
   }
 }
