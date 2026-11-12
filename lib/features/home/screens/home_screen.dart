@@ -4,30 +4,47 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../ingredients/screens/ingredients_screen.dart';
+import '../../ingredients/repositories/ingredient_repository.dart';
 import '../../fridge/screens/my_fridge_screen.dart';
+import '../../fridge/repositories/fridge_repository.dart';
+import '../../recipes/services/recipe_ai_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  // Déconnexion Firebase
-  Future<void> logout(BuildContext context) async {
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final FridgeRepository fridgeRepository =
+      FridgeRepository();
+
+  final IngredientRepository ingredientRepository =
+      IngredientRepository();
+
+  final RecipeAIService recipeAIService =
+      RecipeAIService();
+
+  bool isGenerating = false;
+
+  Future<void> logout() async {
     try {
       await FirebaseAuth.instance.signOut();
-    } on FirebaseAuthException {
-      if (!context.mounted) return;
+    } catch (e) {
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Impossible de se déconnecter. Réessayez.',
+            'Impossible de se déconnecter.',
           ),
         ),
       );
     }
   }
 
-  // Ouvrir la page Mon Frigo
-  void openMyFridge(BuildContext context) {
+  void openMyFridge() {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -36,8 +53,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // Ouvrir le catalogue des ingrédients
-  void openIngredients(BuildContext context) {
+  void openIngredients() {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -46,13 +62,160 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  String formatQuantity(double quantity) {
+    if (quantity == quantity.roundToDouble()) {
+      return quantity.toInt().toString();
+    }
+
+    return quantity.toString();
+  }
+
+  // Génération réelle de recettes avec Gemini AI
+  Future<void> generateRecipesWithAI() async {
+    if (isGenerating) return;
+
+    setState(() {
+      isGenerating = true;
+    });
+
+    try {
+      // 1. Récupérer le frigo personnel
+      final fridgeItems =
+          await fridgeRepository.getFridgeItems();
+
+      if (!mounted) return;
+
+      if (fridgeItems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Votre frigo est vide ! '
+              'Ajoutez des ingrédients avant de générer.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      // 2. Récupérer le catalogue des ingrédients
+      final ingredients =
+          await ingredientRepository.getIngredients();
+
+      final ingredientMap = {
+        for (final ingredient in ingredients)
+          ingredient.id: ingredient.name,
+      };
+
+      // 3. Préparer les ingrédients et quantités
+      final availableIngredients = fridgeItems.map((item) {
+        final name =
+            ingredientMap[item.ingredientId] ??
+            item.ingredientId;
+
+        return '$name : '
+            '${formatQuantity(item.quantity)} '
+            '${item.unit}';
+      }).toList();
+
+      debugPrint(
+        'FridgeChef : ${availableIngredients.length} '
+        'ingrédients envoyés à Gemini.',
+      );
+
+      // 4. Appeler Gemini via Firebase AI Logic
+      final generatedRecipes =
+          await recipeAIService.generateRecipes(
+        availableIngredients,
+      );
+
+      if (!mounted) return;
+
+      // 5. Afficher le résultat brut pour ce premier test
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  color: AppColors.primary,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Recettes générées !',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  generatedRecipes,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Fermer'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('Erreur Gemini AI : $e');
+
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Erreur Gemini AI'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                e.toString(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Fermer'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isGenerating = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    final name = user?.displayName?.trim().isNotEmpty == true
-        ? user!.displayName!.trim()
-        : 'Chef';
+    final name =
+        user?.displayName?.trim().isNotEmpty == true
+            ? user!.displayName!.trim()
+            : 'Chef';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -68,7 +231,7 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Se déconnecter',
-            onPressed: () => logout(context),
+            onPressed: isGenerating ? null : logout,
             icon: const Icon(
               Icons.logout,
               color: AppColors.primary,
@@ -89,7 +252,6 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment:
                     CrossAxisAlignment.stretch,
                 children: [
-                  // Logo
                   const Icon(
                     Icons.restaurant_menu,
                     size: 75,
@@ -98,7 +260,6 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // Message de bienvenue
                   Text(
                     'Bonjour $name !',
                     textAlign: TextAlign.center,
@@ -124,7 +285,6 @@ class HomeScreen extends StatelessWidget {
 
                   // Carte Mon Frigo
                   Container(
-                    width: double.infinity,
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -147,9 +307,8 @@ class HomeScreen extends StatelessWidget {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          'Gérez les ingrédients de votre '
-                          'réfrigérateur et découvrez '
-                          'ce que vous pouvez cuisiner !',
+                          'Gérez vos ingrédients et découvrez '
+                          'ce que vous pouvez cuisiner.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 15,
@@ -162,11 +321,12 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // Bouton Mon Frigo
+                  // Ouvrir le frigo
                   SizedBox(
                     height: 55,
                     child: ElevatedButton.icon(
-                      onPressed: () => openMyFridge(context),
+                      onPressed:
+                          isGenerating ? null : openMyFridge,
                       icon: const Icon(
                         Icons.kitchen_outlined,
                       ),
@@ -182,47 +342,101 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 14),
 
-                  // Bouton catalogue
+                  // Voir le catalogue
                   SizedBox(
                     height: 55,
                     child: OutlinedButton.icon(
-                      onPressed: () =>
-                          openIngredients(context),
-                      icon: const Icon(
-                        Icons.list_alt_outlined,
-                      ),
+                      onPressed:
+                          isGenerating ? null : openIngredients,
+                      icon: const Icon(Icons.list_alt_outlined),
                       label: const Text(
                         'Voir les ingrédients',
-                        style: TextStyle(fontSize: 15),
                       ),
                     ),
                   ),
 
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 24),
 
-                  // Recettes : fonctionnalité future
-                  SizedBox(
-                    height: 55,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Les recettes arrivent bientôt !',
+                  // Carte Gemini AI
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primary
+                            .withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.auto_awesome,
+                          color: AppColors.primary,
+                          size: 42,
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        const Text(
+                          'Votre Chef IA',
+                          style: TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        const Text(
+                          'Gemini analyse votre frigo '
+                          'et vous propose des recettes '
+                          'personnalisées.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton.icon(
+                            onPressed: isGenerating
+                                ? null
+                                : generateRecipesWithAI,
+                            icon: isGenerating
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child:
+                                        CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.auto_awesome,
+                                  ),
+                            label: Text(
+                              isGenerating
+                                  ? 'Génération en cours...'
+                                  : 'Générer mes recettes avec IA',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.restaurant_menu,
-                      ),
-                      label: const Text(
-                        'Découvrir les recettes',
-                        style: TextStyle(fontSize: 15),
-                      ),
+                        ),
+                      ],
                     ),
                   ),
+
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
